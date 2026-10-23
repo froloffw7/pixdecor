@@ -2179,7 +2179,7 @@ float sdRoundedRectE(vec2 p, vec2 center, vec4 rx, vec4 ry) {
 // pick_corner_radius/sdRoundedRectCr: experimental variant against
 // corner radius selection shifting due to offset. In practice it gives no
 // visual improvement (verified), currently unused. Kept as
-// groundwork — see the conversation with Claude dated 2026-09-18 if it needs to be restored.
+// groundwork in case this variant needs to be restored later.
 
 // radius selection — by the UNSHIFTED point (true window geometry),
 // apply the offset only to the distance itself, not to which corner we pick

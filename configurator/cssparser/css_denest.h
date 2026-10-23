@@ -4,7 +4,6 @@
  **  Used for the Sigil C++ CSS Parser
  **
  **  Copyright (C) 2026  Kevin B. Hendricks, Stratford, Ontario, Canada
- **  Co-authored with CoPilot: Claude 4.6 engine
  **
  **  License: MIT
  **  Permission is hereby granted, free of charge, to any person obtaining a
