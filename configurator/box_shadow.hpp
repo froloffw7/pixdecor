@@ -10,7 +10,7 @@
 
 namespace css {
 
-// Финальная типизированная структура одной тени
+// Final typed structure for a single shadow
 struct shadow_t {
     bool     is_inset;
     length_t x_offset;
@@ -22,19 +22,19 @@ struct shadow_t {
 
 class box_shadow {
   public:
-    // Главный метод: парсит всю строку "box-shadow: ..." в типизированные структуры
-    // Возвращает std::nullopt, если строка некорректна или пуста
-    // Парсит как "box-shadow: 0 0 0 1px..." так и просто "0 0 0 1px..."
+    // Main method: parses the entire "box-shadow: ..." string into typed structures
+    // Returns std::nullopt if the string is invalid or empty
+    // Parses both "box-shadow: 0 0 0 1px..." and plain "0 0 0 1px..."
     static std::optional<std::vector<shadow_t>> parse(const std::string& input);
 
-    // Обратная сборка списка теней в CSS-строку (без префикса "box-shadow:")
+    // Serialize a shadow list back into a CSS string (without the "box-shadow:" prefix)
     static std::string format(const std::vector<shadow_t>& shadows);
     
-    // Сборка одной тени в строку
+    // Assemble a single shadow into a string
     static std::string format(const shadow_t& shadow);
 
   private:
-    // Промежуточная строковая структура для внутреннего парсинга
+    // Intermediate string structure for internal parsing
     struct raw_shadow_t {
         bool        is_inset;
         std::string x_offset;
@@ -47,7 +47,7 @@ class box_shadow {
     static std::vector<std::string> split_shadows(const std::string& shadows_list);
     static std::optional<raw_shadow_t> parse_raw_shadow(const std::string& shadow_str);
     
-    // Методы конвертации строк в типы
+    // Methods for converting strings into types
     static std::optional<shadow_t> convert(const raw_shadow_t& raw);
     
 };

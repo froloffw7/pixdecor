@@ -9,13 +9,13 @@ cssparser_sources = files(
 
 cssparser_inc = include_directories('.')
 
-# Используем static_library вместо library, чтобы принудительно собрать .a архив
+# Use static_library instead of library to force building a .a archive
 cssparser_lib = static_library(
     'cssparser',
     cssparser_sources,
     include_directories: cssparser_inc,
-    dependencies: libgio, # 2. Передаем её сюда, чтобы скомпилировать theme_parser.cpp
-    install: false # Статическую библиотеку для плагина устанавливать в систему не нужно
+    dependencies: libgio, # 2. Pass it here so that theme_parser.cpp can be compiled
+    install: false # The plugin's static library does not need to be installed system-wide
 )
 
 cssparser_dep = declare_dependency(

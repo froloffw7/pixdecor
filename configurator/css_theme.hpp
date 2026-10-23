@@ -7,11 +7,11 @@
 #include <algorithm>
 #include <optional>
 
-// Структура: [Одиночный Селектор] -> [Свойство] -> [Значение]
+// Structure: [Single Selector] -> [Property] -> [Value]
 
 namespace css {
 
-// Типы данных и функции для разбора CSS
+// Data types and functions for CSS parsing
 
 int parse_numeric(const std::string& css_text);
 
@@ -24,13 +24,13 @@ enum class unit_t {
 };
 
     
-// Строго типизированный размер (число + единица измерения)
+// Strongly typed size (number + unit)
 struct length_t {
     float value = 0.0;
     unit_t unit = unit_t::none;
 
     bool operator==(const length_t& other) const {
-        // Так как 'a' имеет тип float, используем небольшой эпсилон для точности сравнения
+        // Since 'a' is a float, use a small epsilon for comparison accuracy
         return unit == other.unit && (std::abs(value - other.value) < 0.001f);
     }
 };
@@ -43,7 +43,7 @@ struct unit {
 
 }; 
 
-// Универсальная структура для margin и padding
+// Universal structure for margin and padding
 struct edge_insets_t {
     length_t top;
     length_t right;
@@ -51,14 +51,14 @@ struct edge_insets_t {
     length_t left;
 
     bool operator==(const edge_insets_t& other) const {
-        // Так как 'a' имеет тип float, используем небольшой эпсилон для точности сравнения
+        // Since 'a' is a float, use a small epsilon for comparison accuracy
         return (top == other.top) && (right == other.right) && (bottom == other.bottom) && (left == other.left);
     }
 };
 
 struct edge_insets {
 
-    // Универсальная функция: разберёт как "margin: 0 10px", так и "padding: 4px"
+    // Universal function: parses both "margin: 0 10px" and "padding: 4px"
     static std::optional<edge_insets_t> parse(const std::string& css_text);
     static std::string format(const edge_insets_t&);
 
@@ -71,7 +71,7 @@ enum color_format_t {
     RRGGBBAA,
 };
 
-// Структура для удобного хранения RGB
+// Structure for storing RGB values
 struct color_t {
     uint8_t r;
     uint8_t g;
@@ -89,7 +89,7 @@ struct color
 
 }; // color struct
 
-// Структура для хранения разобранных компонентов рамки
+// Structure for storing the parsed border components
 struct border_t {
     std::string width;
     std::string style;
@@ -98,7 +98,7 @@ struct border_t {
 
 struct border
 {
-    // Основная функция разбора строки border
+    // Main function for parsing a border string
     static border_t parse(const std::string& css_text);
     static std::string format(const border_t& border);
 
@@ -110,7 +110,7 @@ struct border
 
 
 
-// Направление градиента
+// Gradient direction
 enum class gradient_direction_t {
     none,
     to_top,
@@ -119,23 +119,23 @@ enum class gradient_direction_t {
     to_right,
 };
 
-// Точка остановки градиента
+// Gradient color stop
 struct gradient_stop_t {
     double  offset; // 0.0 ... 1.0
     color_t color;
 };
 
-// Финальный результат разбора фона
+// Final result of background parsing
 struct background_t {
     bool                         with_gradient = false;
-    color_t                      color; // без значения по умолчанию
+    color_t                      color; // no default value
     gradient_direction_t         direction = gradient_direction_t::none;
     std::vector<gradient_stop_t> stops;
 };
 
 struct background
 {
-    // Основная функция разбора строки border
+    // Main function for parsing a background string
     static std::optional<background_t> parse(std::string css_text);
     static std::string format(const background_t& bg);
 
@@ -147,7 +147,7 @@ using data_t = std::map<std::string, std::map<std::string, std::string>>;
 
 data_t parse_and_ungroup(const std::string& css_content);
 
-// Функция находит ВСЕ url(...) внутри строки и возвращает их списком
+// The function finds ALL url(...) inside the string and returns them as a list
 std::vector<std::string> extract_asset_paths_from_css(const std::string& css_text);
 
 
@@ -158,7 +158,7 @@ namespace fs {
 std::string extract_filename_with_ext(const std::string& asset_path);
     
 bool file_exists(const std::string& path);
-// Вспомогательная функция для чтения обычного файла с диска в строку
+// Helper function for reading a regular file from disk into a string
 std::string read_plain_file(const std::string& filepath);
 
 bool ensure_directory_exists(const std::string& path);

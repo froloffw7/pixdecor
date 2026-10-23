@@ -31,29 +31,29 @@ std::string get_gsettings_value(const std::string& schema_name, const std::strin
 
 bool
 get_resource_path(const std::string& content, std::string& internal_css_path) {
-    // Ищем директиву @import url("resource://...") в тексте файла
-    // Регулярка вытаскивает всё, что идет после resource:// внутри скобок и кавычек
+    // Look for the @import url("resource://...") directive in the file text
+    // The regex extracts everything after resource:// inside the parentheses and quotes
     std::regex import_regex(R"(@import\s+url\(\"resource:\/\/\/([^ \t\"]+)\"\);)");
     std::smatch match;
 
     if (std::regex_search(content, match, import_regex)) {
-        // match[1] содержит чистый внутренний путь (например: "org/gnome/arc-theme/gtk-main-dark.css")
-        internal_css_path = "/" + match[1].str(); // Добавляем ведущий слэш для GResource
+        // match[1] contains the clean internal path (for example: "org/gnome/arc-theme/gtk-main-dark.css")
+        internal_css_path = "/" + match[1].str(); // Add a leading slash for GResource
         return true;
     }
     return false;
 }
 
-// Функция принимает "/org/gnome/arc-theme/gtk-main-dark.css"
-// и возвращает "/org/gnome/arc-theme/"
+// The function takes "/org/gnome/arc-theme/gtk-main-dark.css"
+// and returns "/org/gnome/arc-theme/"
 std::string
 extract_resource_prefix(const std::string& internal_css_path) {
     size_t last_slash = internal_css_path.find_last_of('/');
     if (last_slash != std::string::npos) {
-        // Отрезаем имя файла, оставляя путь с ведущим и замыкающим слэшем
+        // Strip the filename, leaving a path with leading and trailing slashes
         return internal_css_path.substr(0, last_slash + 1);
     }
-    return "/"; // На крайний случай дефолтный корневой слэш
+    return "/"; // Fall back to the root path
 }
 
 bool
@@ -64,7 +64,7 @@ extract_gresource_to_file(const std::string& gresource_path,
     GError* error = nullptr;
     GResource* resource = nullptr;
 	if (!gresource_path.empty()) {
-	    // 1. Загружаем системный бандл ресурсов с диска
+	    // 1. Load the system resource bundle from disk
 	    resource = g_resource_load(gresource_path.c_str(), &error);
 	    if (error != nullptr) {
 	        g_error_free(error);
@@ -73,7 +73,7 @@ extract_gresource_to_file(const std::string& gresource_path,
 	    g_resources_register(resource);
     }
 
-    // 2. Достаем сырые байты картинки по её внутреннему пути
+    // 2. Fetch the raw image bytes by their internal path
     GBytes* bytes = g_resources_lookup_data(internal_asset_path.c_str(), G_RESOURCE_LOOKUP_FLAGS_NONE, &error);
     if (error != nullptr) {
         g_error_free(error);
@@ -84,20 +84,20 @@ extract_gresource_to_file(const std::string& gresource_path,
         return false;
     }
 
-    // 3. Получаем указатель на данные в памяти и их точный размер
+    // 3. Get a pointer to the data in memory and its exact size
     gsize size = 0;
     const char* raw_data = static_cast<const char*>(g_bytes_get_data(bytes, &size));
 
-    // 4. Записываем байты «как есть» в бинарном режиме в выходной файл
+    // 4. Write the bytes "as is" in binary mode to the output file
     std::ofstream out_file(output_file_path, std::ios::binary);
     if (out_file.is_open()) {
         out_file.write(raw_data, size);
         out_file.close();
     } else {
-        std::cerr << "Ошибка: Не удалось создать файл на диске: " << output_file_path << std::endl;
+        std::cerr << "Error: could not create file on disk: " << output_file_path << std::endl;
     }
 
-    // Освобождаем память
+    // Release the memory
     g_bytes_unref(bytes);
     if (resource != nullptr) {
 	    g_resources_unregister(resource);
@@ -169,7 +169,7 @@ std::string preprocess_gtk_css(std::string css_content) {
 
 std::string
 get_theme_css(const std::string& theme_name, std::string& theme_path, std::string& resource_prefix) {
-    // 1. Формируем приоритетные пути к папке темы на диске
+    // 1. Build the prioritized list of theme directories on disk
     std::vector<std::string> base_paths = {
         "/usr/share/themes/" + theme_name + "/gtk-3.0/",
         std::string(g_get_user_data_dir()) + "/themes/" + theme_name + "/gtk-3.0/",
@@ -178,7 +178,7 @@ get_theme_css(const std::string& theme_name, std::string& theme_path, std::strin
 
     std::string css_content{};
 
-    // Находим, где именно лежит папка темы и читаем файл gtk.css
+    // Locate the theme directory and read its gtk.css file
     for (const auto& path : base_paths) {
         std::string css_path = path + "gtk.css";
         if (fs::file_exists(css_path)) {
@@ -188,8 +188,8 @@ get_theme_css(const std::string& theme_name, std::string& theme_path, std::strin
                 if (get_resource_path(css_content, internal_path)) {
                     std::string gresource_path = path + "gtk.gresource";
                     if (fs::file_exists(gresource_path)) {
-                        std::cout << "Обнаружен импорт ресурса: " << internal_path << std::endl;
-                        std::cout << "Загружаем данные из бандла: " << gresource_path << " ... ";
+                        std::cout << "Resource import detected: " << internal_path << std::endl;
+                        std::cout << "Loading data from the bundle: " << gresource_path << " ... ";
                         css_content = load_css_from_gresource(gresource_path, internal_path);
                         if (css_content.empty()) {
                             std::cout << "FAILED" << std::endl;
@@ -200,14 +200,14 @@ get_theme_css(const std::string& theme_name, std::string& theme_path, std::strin
                             break;
                         }
                     } else {
-                        std::cerr << "файл " << gresource_path  << " для темы " << theme_name << " не существует" << std::endl;
+                        std::cerr << "file " << gresource_path  << " for theme " << theme_name << " does not exist" << std::endl;
                     }
                 } else if (css_content.length() < 100) {
-					std::cerr << "файл " << css_path  << " для темы " << theme_name << " не содержит данных" << std::endl;
+					std::cerr << "file " << css_path  << " for theme " << theme_name << " contains no data" << std::endl;
 					if (theme_name == "Adwaita") {
 					    if (!gtk_init_check(0, nullptr))
-					        std::cerr << "Предупреждение: Не удалось запустить дисплейный сервер, "
-                   			"но ресурсы все равно будут доступны." << std::endl;
+					        std::cerr << "Warning: Failed to start the display server, "
+                   			"but the resources will still be available." << std::endl;
 
 						if (color_scheme == "prefer-dark")
 							internal_path = "/org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css";
@@ -231,18 +231,18 @@ get_theme_css(const std::string& theme_name, std::string& theme_path, std::strin
     if (css_content.empty()) {
         theme_path      = "";
         resource_prefix = "";
-        std::cerr << "Не удалось найти или прочитать файл gtk.css для темы " << theme_name << std::endl;
+        std::cerr << "Failed to find or read the gtk.css file for theme " << theme_name << std::endl;
         return "";
     }
 
-	// 2. А теперь магия приоритета: ищем пользовательский файл конфигурации
+	// 2. Handle precedence: look for the user configuration file
 	std::string user_config_path = std::string(g_get_user_config_dir()) + "/gtk-3.0/gtk.css";
 	if (fs::file_exists(user_config_path)) {
 		std::string user_css_content = fs::read_plain_file(user_config_path);
 
 		if (!user_css_content.empty()) {
-			std::cout << "Обнаружены пользовательские стили в: " << user_config_path << std::endl;
-			// Просто склеиваем их! Стили пользователя перезапишут системные за счет порядка в CSS
+			std::cout << "User styles detected in: " << user_config_path << std::endl;
+			// Concatenate them: user styles override system styles by CSS order.
 			css_content += "\n" + user_css_content;
 		}
 	}
@@ -250,36 +250,36 @@ get_theme_css(const std::string& theme_name, std::string& theme_path, std::strin
     return preprocess_gtk_css(css_content);
 }
 
-// Функция вытаскивает "assets/titlebutton-close-dark.png" из строки background-image
+// The function extracts "assets/titlebutton-close-dark.png" from a background-image string
 std::string
 extract_url_path(const std::string& css_value) {
-    // Регулярка ищет первое вхождение url("...") или url('...')
+    // The regex looks for the first occurrence of url("...") or url('...')
     std::regex url_regex(R"(url\([\"']?([^\"'\)]+)[\"']?\))");
     std::smatch match;
 
     if (std::regex_search(css_value, match, url_regex)) {
-        return match.str(1); // Возвращает чистый путь: "assets/titlebutton-close-dark.png"
+        return match.str(1); // Returns the clean path: "assets/titlebutton-close-dark.png"
     }
     return std::string{};
 }
 
-// Функция находит ВСЕ url(...) внутри строки и возвращает их списком
+// The function finds ALL url(...) inside the string and returns them as a list
 std::vector<std::string>
 extract_url_paths(const std::string& css_value) {
     std::vector<std::string> paths;
     
-    // Регулярка для поиска url("...") или url('...')
+    // Regex for finding url("...") or url('...')
     std::regex url_regex(R"(url\([\"']?([^\"'\)]+)[\"']?\))");
     
     std::string::const_iterator search_start(css_value.cbegin());
     std::smatch match;
 
     while (std::regex_search(search_start, css_value.cend(), match, url_regex)) {
-        paths.push_back(match.str(1)); // match.str(1) — это группа внутри круглых скобок
-        search_start = match.suffix().first; // двигаемся к следующему url()
+        paths.push_back(match.str(1)); // match.str(1) is the group inside the parentheses
+        search_start = match.suffix().first; // move on to the next url()
     }
 
-    return paths; // Вернет либо один путь, либо два (обычный и @2), либо пустой вектор
+    return paths; // Returns either one path, or two (regular and @2), or an empty vector
 }
 
 struct icon_paths_t {
@@ -344,43 +344,43 @@ std::string get_theme_icon_path_portable(const std::string& icon_theme_name,
 {
     std::string path = "";
 
-    // 1. Создаем изолированный объект темы. Он пустой и НЕ привязан к экрану
+    // 1. Create an isolated theme object. It is empty and NOT bound to the screen
     GtkIconTheme *icon_theme = gtk_icon_theme_new();
 
-    // 2. В GTK 3 для ручной установки темы на локальный объект 
-    // используется именно эта функция. На не-синглтоне она работает без ошибок!
+    // 2. In GTK 3, this is the function used to manually set the theme on a local object.
+    // It also works on non-singleton objects.
     gtk_icon_theme_set_custom_theme(icon_theme, icon_theme_name.c_str());
 
-    // 3. Формируем имя символьной иконки
+    // 3. Build the symbolic icon name
     std::string symbolic_name = "window-" + icon_name;// + "-symbolic";
 
 	GtkIconInfo *icon_info = gtk_icon_theme_lookup_icon_for_scale(
 	    icon_theme, 
 	    symbolic_name.c_str(), 
-	    icon_size,                  // Исходный базовый размер в пикселях (unscaled)
-	    icon_scale,                 // Масштаб: 2 для @2 (HiDPI), 1 для обычных экранов
+	    icon_size,                  // Original base size in pixels (unscaled)
+	    icon_scale,                 // Scale: 2 for @2 (HiDPI), 1 for regular screens
         GtkIconLookupFlags(GTK_ICON_LOOKUP_NO_SVG | GTK_ICON_LOOKUP_FORCE_SYMBOLIC)
-	    //GTK_ICON_LOOKUP_FORCE_SIZE  // Флаг принудительного ограничения размера
+	    //GTK_ICON_LOOKUP_FORCE_SIZE  // Force the requested icon size
 	);
-    // 4b. Ищем векторный SVG вариант
+    // 4b. Look for the vector SVG variant
     if (!icon_info) {
 		icon_info = gtk_icon_theme_lookup_icon_for_scale(
 		    icon_theme, 
 		    symbolic_name.c_str(), 
-		    icon_size,                  // Исходный базовый размер в пикселях (unscaled)
-		    icon_scale,                 // Масштаб: 2 для @2 (HiDPI), 1 для обычных экранов
+		    icon_size,                  // Original base size in pixels (unscaled)
+		    icon_scale,                 // Scale: 2 for @2 (HiDPI), 1 for regular screens
 	        GtkIconLookupFlags(GTK_ICON_LOOKUP_FORCE_SVG | GTK_ICON_LOOKUP_FORCE_SYMBOLIC)
-		    //GTK_ICON_LOOKUP_FORCE_SIZE  // Флаг принудительного ограничения размера
+		    //GTK_ICON_LOOKUP_FORCE_SIZE  // Force the requested icon size
 		);
 #if 0
     GtkIconInfo *icon_info = gtk_icon_theme_lookup_icon(
         icon_theme, 
         symbolic_name.c_str(), 
-        icon_size, // Базовый размер
+        icon_size, // Base size
         GTK_ICON_LOOKUP_FORCE_SVG
     );
-	// Запрашиваем иконку с указанием масштабного коэффициента (Scale Factor)
-    // Резервный поиск без суффикса -symbolic
+	// Request the icon with an explicit scale factor
+    // Fallback lookup without the -symbolic suffix
     if (!icon_info) {
 	    std::string alt_name = "window-" + icon_name;
         icon_info = gtk_icon_theme_lookup_icon(
@@ -392,23 +392,23 @@ std::string get_theme_icon_path_portable(const std::string& icon_theme_name,
 		icon_info = gtk_icon_theme_lookup_icon_for_scale(
 		    icon_theme, 
             alt_name.c_str(), 
-		    icon_size,                  // Исходный базовый размер в пикселях (unscaled)
-		    icon_scale,                 // Масштаб: 2 для @2 (HiDPI), 1 для обычных экранов
-		    GTK_ICON_LOOKUP_FORCE_SIZE  // Флаг принудительного ограничения размера
+		    icon_size,                  // Original base size in pixels (unscaled)
+		    icon_scale,                 // Scale: 2 for @2 (HiDPI), 1 for regular screens
+		    GTK_ICON_LOOKUP_FORCE_SIZE  // Force the requested icon size
 		);
 #endif
     }
 
     if (icon_info) {
-        // Получаем точный абсолютный путь, который движок GTK нашел в системе
+        // Get the absolute path where GTK found the icon
         const char *filename = gtk_icon_info_get_filename(icon_info);
         if (filename) {
-            printf("Иконка '%s' найдена по пути: %s\n", icon_name.c_str(), filename);
+            printf("Icon '%s' found at path: %s\n", icon_name.c_str(), filename);
             path = filename;
         }
         g_object_unref(icon_info);
     } else {
-        printf("Иконка '%s' не найдена встроенным поиском.\n", icon_name.c_str());
+        printf("Icon '%s' not found by the built-in lookup.\n", icon_name.c_str());
     }
 
     g_object_unref(icon_theme);
@@ -552,7 +552,7 @@ bool add_shadow_key(std::ofstream& out, css::data_t& css_data, const std::string
 
 #if 0
 void test_ini() {
-// ~/.config/gtk-3.0/settings.ini (проверить и gtk-4.0 — могут расходиться):
+// ~/.config/gtk-3.0/settings.ini (also check gtk-4.0 — they may differ):
 const std::string prefer_dark =
     read_ini_key(settings_ini_path, "Settings",
                  "gtk-application-prefer-dark-theme");
@@ -588,7 +588,7 @@ bool get_property(css::data_t& css_data, const std::string& selector, const std:
 #endif
 
 int main() {
-	std::cout << "=== Запуск генератора settings.ini ===" << std::endl;
+	std::cout << "=== Starting the settings.ini generator ===" << std::endl;
 
 	std::string gtk_theme    = get_gsettings_value("org.gnome.desktop.interface", "gtk-theme");
 	if (gtk_theme.empty()) gtk_theme = "Adwaita";
@@ -603,10 +603,10 @@ int main() {
 	gtk_theme = "Adwaita";
 	color_scheme = "prefer-dark";
 	
-	// Возможные значения ключа "color-scheme":
-	// - 'prefer-dark'  -> Пользователь предпочитает тёмную тему
-	// - 'prefer-light' -> Пользователь предпочитает светлую тему
-	// - 'default'      -> Стандартная тема (обычно светлая)
+	// Possible values of the "color-scheme" key:
+	// - 'prefer-dark'  -> The user prefers a dark theme
+	// - 'prefer-light' -> The user prefers a light theme
+	// - 'default'      -> The standard theme (usually light)
 	std::cout << "Color scheme:\t" << color_scheme << std::endl; 
 	
 	//std::string plugin_theme_path = std::string(g_get_user_config_dir()) + "/wayfire/assets/" + gtk_theme;
@@ -623,7 +623,7 @@ int main() {
 		std::string key;
 		std::string border_style;
 
-		out << "; Сгенерировано автоматически конфигуратором gtkdecor" << std::endl;
+		out << "; Generated automatically by the gtkdecor configurator" << std::endl;
 		out << std::endl << "[main]" << std::endl;
 		add_key(out, "theme-name", gtk_theme);
 		add_key(out, "font-name",  font_name);
@@ -637,7 +637,7 @@ int main() {
 
 		std::string css_content = get_theme_css(gtk_theme, theme_path, resource_prefix);
 		if (!css_content.empty()) {
-			std::cout << "CSS темы " << gtk_theme << " успешно загружен в память!" << std::endl;
+			std::cout << "CSS for theme " << gtk_theme << " successfully loaded into memory!" << std::endl;
 		}		
 		css::data_t css_data    = css::parse_and_ungroup(css_content);
 		 // fallbacks
@@ -790,7 +790,7 @@ int main() {
         add_key(out, "spacing", "6px");
         add_key(out, "image-size", std::to_string(image_size) + "px");
 
-        // 1. Достаем зазоры кнопок из padding
+        // 1. Extract button spacing from padding
   		//selector = "headerbar.default-decoration button.titlebutton";
         bool has_icon_color            = false;
         bool has_icon_background_color = false;
@@ -833,10 +833,10 @@ int main() {
 		if (!has_icon_background_color)
 		    add_color_key(out, "background-color" + suffix, background_color);
 #if 0
-        // 2. Достаем размер полей окна под тень из margin
-        std::string margin_raw = css_tree["decoration"]["margin"]; // Например, "10px" или "10px 10px 10px 10px"
+        // 2. Extract the window shadow margin from margin
+        std::string margin_raw = css_tree["decoration"]["margin"]; // For example, "10px" or "10px 10px 10px 10px"
         edge_insets_t window_margin = css_utils::parse_edge_insets(margin_raw);
-        int shadow_margin = static_cast<int>(window_margin.top.value); // Получим чистые 10
+        int shadow_margin = static_cast<int>(window_margin.top.value); // This extracts the raw 10
 #endif
         // 1. Declare the matrix metadata strings
         std::vector<std::string> buttons = {"close", "minimize", "maximize", "restore"};
@@ -967,9 +967,9 @@ int main() {
             }
         }        
 		
-		std::cout << "Конфигурация успешно сохранена в: " << output_path << std::endl;
+		std::cout << "Configuration successfully saved to: " << output_path << std::endl;
 	} else {
-		std::cerr << "Ошибка создания файла!" << std::endl;
+		std::cerr << "Error creating the file!" << std::endl;
 	}
 	return 0;
 }

@@ -1,12 +1,12 @@
 #include <css_helpers.hpp>
 #include <algorithm>
 #if __cplusplus < 202002L
-#include <cstdarg> // Обязательно для va_list, va_start, va_end
+#include <cstdarg> // Required for va_list, va_start, va_end
 #endif
 
 namespace css {
 
-// Вспомогательная функция для очистки пробелов и переносов строк
+// Helper function for trimming whitespace and line breaks
 std::string trim(const std::string& text) {
     if (text.empty()) return std::string{};
 	
@@ -18,19 +18,19 @@ std::string trim(const std::string& text) {
 
 int parse_numeric(const std::string& value) {
     try {
-        // std::stoi превратит "12pt" в 12, а "1px" в 1
+        // std::stoi will turn "12pt" into 12 and "1px" into 1
         return std::stoi(value);
     } catch (...) {
-        return 0; // На случай, если строка была пустой или некорректной
+        return 0; // In case the string was empty or invalid
     }
 }
 
 #if __cplusplus < 202002L
 
-#include <cstdarg> // Обязательно для va_list, va_start, va_end
+#include <cstdarg> // Required for va_list, va_start, va_end
 
 std::string cxx_format(std::string fmt, ...) {
-    // 1. Быстро переводим синтаксис C++ в Си-синтаксис
+    // 1. Quickly convert C++ syntax into C syntax
     for (size_t pos = 0; (pos = fmt.find("{:")) != std::string::npos; ) {
         size_t end_pos = fmt.find('}', pos);
         fmt.replace(pos, end_pos - pos + 1, "%" + fmt.substr(pos + 2, end_pos - pos - 2));
@@ -41,20 +41,20 @@ std::string cxx_format(std::string fmt, ...) {
         fmt.replace(pos, 2, "%d"); 
     }
 
-    // 2. Инициализируем список аргументов Си
+    // 2. Initialize the C argument list
     va_list args;
     
-    // Сначала измеряем размер итоговой строки
+    // First measure the size of the resulting string
     va_start(args, fmt);
     int size_s = std::vsnprintf(nullptr, 0, fmt.c_str(), args);
     va_end(args);
 
     if (size_s <= 0) return "";
 
-    // Выделяем память под строку
+    // Allocate memory for the string
     std::string result(static_cast<size_t>(size_s), '\0');
     
-    // Заполняем строку реальными данными
+    // Fill the string with the actual data
     va_start(args, fmt);
     std::vsnprintf(&result[0], size_s + 1, fmt.c_str(), args);
     va_end(args);

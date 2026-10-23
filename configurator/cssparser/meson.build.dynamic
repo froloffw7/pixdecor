@@ -1,6 +1,6 @@
 # cssparser/meson.build
 
-# Перечисляем все исходные файлы (заголовочные файлы .h указывать не обязательно, но полезно для IDE)
+# List all source files (headers are optional, but useful for IDEs)
 cssparser_sources = files(
     'css_denest.cpp',
     'css_parser.cpp',
@@ -8,18 +8,18 @@ cssparser_sources = files(
     'css_utils.cpp'
 )
 
-# Указываем, где лежат заголовочные файлы библиотеки
+# Specify where the library's header files are located
 cssparser_inc = include_directories('.')
 
-# Создаем саму библиотеку (библиотека будет статической или разделяемой в зависимости от настроек Meson)
+# Create the library itself (static or shared, depending on Meson settings)
 cssparser_lib = library(
     'cssparser',
     cssparser_sources,
     include_directories: cssparser_inc,
-    install: false # Поставьте true, если её нужно устанавливать в систему
+    install: false # Set to true if it should be installed system-wide
 )
 
-# Создаем dependency (зависимость), которую легко подключить к вашему главному исполняемому файлу
+# Create a dependency that can be easily linked into your main executable
 cssparser_dep = declare_dependency(
     link_with: cssparser_lib,
     # include_directories: cssparser_inc

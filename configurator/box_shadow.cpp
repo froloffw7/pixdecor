@@ -138,8 +138,8 @@ std::optional<std::vector<shadow_t>> box_shadow::parse(const std::string& input)
     size_t colon_pos = str.find(':');
     if (colon_pos != std::string::npos) {
         std::string prefix = trim(str.substr(0, colon_pos));
-        // Пытаемся распарсить префикс. Если это не box-shadow, строка может быть просто 
-        // объявлением значений без заголовка, содержащим случайное двоеточие (например, внутри rgba)
+        // Try to parse the prefix. If it is not box-shadow, the string may simply be
+        // a value declaration without a header that contains a stray colon (for example, inside rgba)
         if (prefix == "box-shadow") {
             shadow_text = trim(str.substr(colon_pos + 1));
         }
@@ -169,8 +169,8 @@ std::string box_shadow::format(const shadow_t& shadow) {
     res += unit::format(shadow.x_offset) + " "
          + unit::format(shadow.y_offset);
          
-    // В CSS можно опускать blur и spread, если они равны 0, 
-    // но если spread не нулевой, мы обязаны вывести и blur.
+    // In CSS, blur and spread may be omitted when they are 0,
+    // but if spread is non-zero, we must also output blur.
     if (shadow.blur_radius.value != 0.0f || shadow.spread_radius.value != 0.0f) {
         res += " " + unit::format(shadow.blur_radius);
     }

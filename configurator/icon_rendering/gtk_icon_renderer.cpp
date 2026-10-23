@@ -20,19 +20,19 @@ class gtk_renderer_t {
 
     static void init() {
         if (!gtk_init_check(nullptr, nullptr)) {
-            std::cerr << "Нет дисплея — нужен X11/Wayland или: xvfb-run -a ./app\n";
+            std::cerr << "No display — X11/Wayland is required, or use: xvfb-run -a ./app\n";
             std::exit(1);
         }
     }
 
-    // CSS строкой (самодостаточные фрагменты)
+    // CSS as a string (self-contained fragments)
     static bool bake_css(const std::string& css,
                          const std::string& icon_name, const std::string& out,
                          GtkStateFlags state, int w, int h, int scale) {
         GError* err = nullptr;
         GtkCssProvider* provider = gtk_css_provider_new();
         if (!gtk_css_provider_load_from_data(provider, css.c_str(), -1, &err)) {
-            std::cerr << "CSS не разобран: " << (err ? err->message : "?") << "\n";
+            std::cerr << "CSS could not be parsed: " << (err ? err->message : "?") << "\n";
             g_clear_error(&err); g_object_unref(provider);
             return false;
         }
@@ -42,15 +42,15 @@ class gtk_renderer_t {
         return ok;
     }
 
-    // Файл темы — правильный путь: @import/url() резолвятся,
-    // и там есть hover/active/backdrop-правила, которых нет во фрагменте.
+    // Using a theme file is the right approach: @import/url() are resolved,
+    // and it contains hover/active/backdrop rules that a fragment lacks.
     static bool bake_file(const std::string& path,
                           const std::string& icon_name, const std::string& out,
                           GtkStateFlags state, int w, int h, int scale) {
         GError* err = nullptr;
         GtkCssProvider* provider = gtk_css_provider_new();
         if (!gtk_css_provider_load_from_path(provider, path.c_str(), &err)) {
-            std::cerr << "Не удалось загрузить " << path << ": "
+            std::cerr << "Failed to load " << path << ": "
                       << (err ? err->message : "?") << "\n";
             g_clear_error(&err); g_object_unref(provider);
             return false;
@@ -61,21 +61,21 @@ class gtk_renderer_t {
         return ok;
     }
 
-    // Режим 1: системная тема, CSS не трогаем
+    // Mode 1: system theme, leave the CSS untouched
     static bool bake_system(const std::string& icon, const std::string& out,
                             GtkStateFlags state, int w, int h, int scale) {
         return bake(nullptr, icon, out, state, w, h, scale);
     }
 
-    // Режим 2: тема из GResource libgtk, без распаковки
+    // Mode 2: theme from the libgtk GResource, without unpacking
     static bool bake_builtin(const std::string& theme, bool dark, const std::string& icon,
                              const std::string& out, GtkStateFlags state, int w, int h, int scale) {
     
         const std::string base = "/org/gtk/libgtk/theme/" + theme + "/";
         std::string candidates[2];
         if (dark) {
-            candidates[0] = base + "gtk-contained-dark.css";  // полный (как у вас, 2404)
-            candidates[1] = base + "gtk-dark.css";            // старые layout'ы: там это полный файл
+            candidates[0] = base + "gtk-contained-dark.css";  // full file (as in your case, 2404 lines)
+            candidates[1] = base + "gtk-dark.css";            // legacy layouts: there this is the full file
         } else {
             candidates[0] = base + "gtk-contained.css";
             candidates[1] = base + "gtk.css";
@@ -88,7 +88,7 @@ class gtk_renderer_t {
                 break;
             }
         if (chosen.empty()) {
-            std::cerr << "Тема " << theme << " не вшита в этот libgtk\n";
+            std::cerr << "Theme " << theme << " is not built into this libgtk\n";
             return false;
         }
 
@@ -100,7 +100,7 @@ class gtk_renderer_t {
         return ok;
     }
 
-    // Ручки темы для режима 1 (вызывать сразу после init, до создания виджетов)
+    // Theme setup for mode 1 (call right after init, before creating widgets)
     static void set_theme(const char* name, bool prefer_dark) {
         GtkSettings* s = gtk_settings_get_default();
         if (name && *name)
@@ -117,7 +117,7 @@ class gtk_renderer_t {
         return r;
     }
 
-    // Проверка одного имени по тем же правилам (для валидации --theme=…)
+    // Validate a single name by the same rules (for --theme=… validation)
     static bool theme_exists(const std::string& name) {
         if (name.empty() || name.find('/') != std::string::npos) return false;
         if (builtin_has(name.c_str(), false)) return true;
@@ -139,36 +139,36 @@ class gtk_renderer_t {
         return false;
     }
 
-    // Что вообще вшито: перечисляет Adwaita/, HighContrast/…
+    // List the built-in themes (Adwaita/, HighContrast/, ...)
     static void list_builtin_themes() {
         GError* err = nullptr;
         gchar** dirs = g_resources_enumerate_children("/org/gtk/libgtk/theme",
                                                       G_RESOURCE_LOOKUP_FLAGS_NONE, &err);
         if (!dirs) { g_clear_error(&err); return; }
-        std::cout << "Встроено в libgtk:";
+        std::cout << "Built into libgtk:";
         for (gchar** d = dirs; *d; ++d) {
             std::string theme = *d;
-            if (!theme.empty() && theme.back() == '/') theme.pop_back();// Удаляем последний символ '/'
+            if (!theme.empty() && theme.back() == '/') theme.pop_back();// Remove the last '/' character
             std::cout << "\n    " << theme;
         }
-        std::cout << "\n(файлы внутри: g_resources_enumerate_children(\"/org/gtk/libgtk/theme/\", …))\n";
+        std::cout << "\n(files inside: g_resources_enumerate_children(\"/org/gtk/libgtk/theme/\", …))\n";
         g_strfreev(dirs);
     }
 
-    // имя → есть ли тёмный вариант
+    // name → whether a dark variant exists
     static std::vector<std::pair<std::string,theme_info_t>> list_themes() {
         std::map<std::string,theme_info_t> out;
 
         collect_from_dir(std::string(g_get_user_data_dir()) + "/themes", true, out); // ~/.local/share/themes
-        collect_from_dir(std::string(g_get_home_dir())     + "/.themes", true, out); // легаси, GTK его тоже смотрит
+        collect_from_dir(std::string(g_get_home_dir())     + "/.themes", true, out); // legacy, GTK also looks there
         for (const gchar* const* p = g_get_system_data_dirs(); *p; ++p)              // /usr/local/share, /usr/share, …
             collect_from_dir(std::string(*p) + "/themes", false, out);
 #if 0
-        for (const char* b : {"Adwaita", "HighContrast"})     // встроенные: на диске их нет
+        for (const char* b : {"Adwaita", "HighContrast"})     // built-in: not present on disk
             if (builtin_has(b, false) && !out.count(b))
                 out.emplace(b, builtin_has(b, true));
 #endif
-        return { out.begin(), out.end() };                    // map => уже отсортировано
+        return { out.begin(), out.end() };                    // map => already sorted
     }
 
   private:
@@ -179,15 +179,15 @@ class gtk_renderer_t {
         while ((name = g_dir_read_name(d)) != nullptr) {
             const std::string base = dir + "/" + name + "/gtk-3.0";
             if (!g_file_test((base + "/gtk.css").c_str(), G_FILE_TEST_IS_REGULAR))
-                continue;                                   // не GTK3-тема — мимо
+                continue;                                   // not a GTK3 theme — skip
             const bool has_dark =
                 g_file_test((base + "/gtk-dark.css").c_str(), G_FILE_TEST_IS_REGULAR);
-            out[name] = {user, has_dark};                   // дедуп по имени
+            out[name] = {user, has_dark};                   // deduplicate by name
         }
         g_dir_close(d);
     }
 
-    static bool builtin_has(const char* theme, bool dark) { // для встроенных Adwaita/HighContrast
+    static bool builtin_has(const char* theme, bool dark) { // for the built-in Adwaita/HighContrast
         const std::string p = std::string("/org/gtk/libgtk/theme/") + theme +
                               (dark ? "/gtk-dark.css" : "/gtk.css");
         GBytes* b = g_resources_lookup_data(p.c_str(), G_RESOURCE_LOOKUP_FLAGS_NONE, nullptr);
@@ -201,11 +201,11 @@ class gtk_renderer_t {
         GdkScreen* screen = gdk_screen_get_default();
 
         if (provider)
-            // (3) Провайдер — на весь экран, поверх темы (APPLICATION=600 > THEME=200)
+            // (3) Provider — for the whole screen, on top of the theme (APPLICATION=600 > THEME=200)
             gtk_style_context_add_provider_for_screen(
                 screen, GTK_STYLE_PROVIDER(provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
 
-        // Дерево как у настоящего CSD-окна:
+        // Widget tree matching a real CSD window:
         // window.background.csd > headerbar.titlebar > button.titlebutton.close
         GtkWidget* window = gtk_offscreen_window_new();
         GtkWidget* header = gtk_header_bar_new();
@@ -221,21 +221,21 @@ class gtk_renderer_t {
         gtk_style_context_add_class(gtk_widget_get_style_context(header), "titlebar");
 
         GtkStyleContext* ctx = gtk_widget_get_style_context(button);
-        gtk_style_context_add_class(ctx, "titlebutton"); // это добавляет GtkWindow
-        // gtk_style_context_add_class(ctx, "close");       // и это тоже — для close
+        gtk_style_context_add_class(ctx, "titlebutton"); // GtkWindow adds this
+        // gtk_style_context_add_class(ctx, "close");       // and this too — for close
         gtk_style_context_add_class(ctx, icon_name.c_str());
-        //gtk_style_context_add_class(ctx, "flat");        // GTK сам НЕ добавляет; нужен,
-                                                          // только если ваш CSS пишет button.flat
+        //gtk_style_context_add_class(ctx, "flat");        // GTK does NOT add it itself; needed
+                                                          // only if your CSS targets button.flat
 
         gtk_container_add(GTK_CONTAINER(window), header);
         gtk_header_bar_pack_start(GTK_HEADER_BAR(header), button);
         gtk_widget_set_size_request(button, w, h);
 
-        // (1) ГЛАВНОЕ: состояние — ДО первого вычисления стиля.
-        // Никаких show_all / gtk_style_context_set_state / invalidate.
+        // (1) IMPORTANT: set the state BEFORE the first style computation.
+        // No show_all / gtk_style_context_set_state / invalidate.
         gtk_widget_set_state_flags(button, state, TRUE);
 
-        // «Нативный» размер кнопки по CSS (если понадобится):
+        // The button's "native" size according to CSS (if needed):
         // gint mn, nat;
         // gtk_widget_get_preferred_width(button, &mn, &nat);
 
@@ -247,43 +247,43 @@ class gtk_renderer_t {
         gtk_render_background(ctx, cr, 0, 0, w, h);
         gtk_render_frame(ctx, cr, 0, 0, w, h);
 
-        // Отладка: что GTK реально насчитал по CSS
+        // Debug: what GTK actually computed from the CSS
         // char* dump = gtk_style_context_to_string(ctx, GTK_STYLE_CONTEXT_PRINT_SHOW_STYLE);
         // std::cerr << dump << "\n"; g_free(dump);
 
-        // Глиф: размер — из CSS-паддингов, цвет — из контекста (state-aware)
+        // Glyph: size — from the CSS paddings, color — from the context (state-aware)
         GtkBorder pad;
         gtk_style_context_get_padding(ctx, state, &pad);
         int icon_size = std::min(w - pad.left - pad.right, h - pad.top - pad.bottom);
-        if (icon_size < 8) icon_size = 16;  // как GtkWindow (GTK_ICON_SIZE_MENU)
+        if (icon_size < 8) icon_size = 16;  // like GtkWindow (GTK_ICON_SIZE_MENU)
 
         const std::string symbolic_name = "window-" + icon_name;
         auto icon_theme = gtk_icon_theme_get_default();
 
-        // A. Ищем PNG вариант
+        // A. Look for the PNG variant
     	GtkIconInfo *info = gtk_icon_theme_lookup_icon_for_scale(
     	    icon_theme, 
     	    symbolic_name.c_str(), 
-    	    icon_size,             // Исходный базовый размер в пикселях (unscaled)
-    	    scale,                 // Масштаб: 2 для @2 (HiDPI), 1 для обычных экранов
+    	    icon_size,             // Original base size in pixels (unscaled)
+    	    scale,                 // Scale: 2 for @2 (HiDPI), 1 for regular screens
             GtkIconLookupFlags(GTK_ICON_LOOKUP_NO_SVG | GTK_ICON_LOOKUP_FORCE_SYMBOLIC)
-    	    //GTK_ICON_LOOKUP_FORCE_SIZE  // Флаг принудительного ограничения размера
+    	    //GTK_ICON_LOOKUP_FORCE_SIZE  // Force the requested icon size
     	);
-        // B. Ищем векторный SVG вариант
+        // B. Look for the vector SVG variant
         if (!info)
     		info = gtk_icon_theme_lookup_icon_for_scale(
     		    icon_theme, 
     		    symbolic_name.c_str(), 
-    		    icon_size,             // Исходный базовый размер в пикселях (unscaled)
-    		    scale,                 // Масштаб: 2 для @2 (HiDPI), 1 для обычных экранов
+    		    icon_size,             // Original base size in pixels (unscaled)
+    		    scale,                 // Scale: 2 for @2 (HiDPI), 1 for regular screens
     	        GtkIconLookupFlags(GTK_ICON_LOOKUP_FORCE_SVG | GTK_ICON_LOOKUP_FORCE_SYMBOLIC)
-    		    //GTK_ICON_LOOKUP_FORCE_SIZE  // Флаг принудительного ограничения размера
+    		    //GTK_ICON_LOOKUP_FORCE_SIZE  // Force the requested icon size
     		);
-        // Дамп вычисленного стиля — только под флагом: на каждый bake это тысячи строк
+        // Dump the computed style — only behind the flag: each bake produces thousands of lines
         if (getenv("BAKERY_DEBUG"))
             std::cout << gtk_style_context_to_string(ctx, GTK_STYLE_CONTEXT_PRINT_RECURSE) << std::endl;
-        // Иконка не нашлась — молча писать PNG с одним фоном нельзя:
-        // шейдер получит «пустую» кнопку. Считаем баком FAIL.
+        // The icon was not found — silently writing a PNG with just a background is not acceptable:
+        // the shader would get an "empty" button. Treat this bake as a failure.
         bool icon_ok = info != nullptr;
         if (info) {
            GError* ierr = nullptr;
@@ -293,15 +293,15 @@ class gtk_renderer_t {
                double iw = gdk_pixbuf_get_width(pixbuf)  / (double)scale;
                double ih = gdk_pixbuf_get_height(pixbuf) / (double)scale;
 #if 0
-                // gtk_render_icon рисует сам и применяет -gtk-icon-shadow из темы
-                // (в Adwaita: 0 1px rgba(255,255,255,0.77), у :backdrop — none)
+                // gtk_render_icon draws by itself and applies -gtk-icon-shadow from the theme
+                // (in Adwaita: 0 1px rgba(255,255,255,0.77), for :backdrop — none)
                 gtk_render_icon(ctx, cr, pixbuf, (w - iw) / 2.0, (h - ih) / 2.0);
 #else
-               // 1:1 физические пиксели для HiDPI — как было;
-               // если вернёте :disabled — apply_icon_effect(pixbuf, ...) ЗДЕСЬ, до surface
+               // 1:1 physical pixels for HiDPI — as it was;
+               // if you re-enable :disabled, apply_icon_effect(pixbuf, ...) HERE, before creating the surface
                cairo_surface_t* icon_surface = gdk_cairo_surface_create_from_pixbuf(pixbuf, scale, nullptr);
 
-               // …но отрисовку отдаём GTK: применит -gtk-icon-shadow и -gtk-icon-transform из CSS
+               // …but we hand rendering to GTK: it applies -gtk-icon-shadow and -gtk-icon-transform from CSS
                gtk_render_icon_surface(ctx, cr, icon_surface, (w - iw) / 2.0, (h - ih) / 2.0);
                cairo_surface_destroy(icon_surface);
 #endif
@@ -312,15 +312,15 @@ class gtk_renderer_t {
            g_clear_error(&ierr);
            g_object_unref(info);
         } else {
-            std::cerr << symbolic_name << "-symbolic не найден (нет значковой темы?)\n";
+            std::cerr << symbolic_name << "-symbolic not found (no icon theme?)\n";
         }
 
         cairo_status_t status = cairo_surface_write_to_png(surface, out.c_str());
         cairo_destroy(cr);
         cairo_surface_destroy(surface);
 
-        // (2) Контекст кнопки принадлежит кнопке — НЕ unref-им его.
-        gtk_widget_destroy(window);  // освобождает и header, и button, и их контексты
+        // (2) The button's context belongs to the button — do NOT unref it.
+        gtk_widget_destroy(window);  // frees the header, the button, and their contexts
         if (provider)
             gtk_style_context_remove_provider_for_screen(screen, GTK_STYLE_PROVIDER(provider));
 
@@ -331,19 +331,19 @@ class gtk_renderer_t {
 bool ensure_directory_exists(const std::string& path) {
     std::filesystem::path dir(path);
 
-    // Метод .parent_path() автоматически отрежет имя файла, если вы передали путь к файлу
-    // Например, из "~/.config/wayfire/assets/close.png" он сделает "~/.config/wayfire/assets/"
+    // The .parent_path() method automatically strips the filename if you passed a file path
+    // For example, from "~/.config/wayfire/assets/close.png" it will make "~/.config/wayfire/assets/"
     if (dir.has_filename() && dir.extension() != "") {
         dir = dir.parent_path();
     }
 
     try {
-        // create_directories сама проверяет существование.
-        // Она вернет true, если создала новые папки, и false, если они уже были.
+        // create_directories checks whether the path exists.
+        // It returns true if it created new directories, and false if they already existed.
         std::filesystem::create_directories(dir);
         return true;
     } catch (const std::filesystem::filesystem_error& e) {
-        std::cerr << "Ошибка создания директории: " << e.what() << std::endl;
+        std::cerr << "Error creating directory: " << e.what() << std::endl;
         return false;
     }
 }
@@ -363,7 +363,7 @@ void print_help(const char *prg) {
 }
 
 #if 0
-// фрагмент — только для демонстрации (hover/active в нём «плоские» — это ожидаемо):
+// fragment — for demonstration only (hover/active are "flat" in it — that is expected):
 const std::string fragment = R"CSS(
 button.titlebutton, notebook > header > tabs > arrow, button { min-height: 24px; min-width: 16px; padding: 4px 9px; border: 1px solid; border-radius: 5px; transition: all 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94); color: #eeeeec; outline-color: rgba(238, 238, 236, 0.3); border-color: #1b1b1b; border-bottom-color: #070707; background-image: linear-gradient(to top, #323232 2px, #353535); text-shadow: 0 -1px rgba(0, 0, 0, 0.834353); -gtk-icon-shadow: 0 -1px rgba(0, 0, 0, 0.834353); box-shadow: inset 0 1px rgba(255, 255, 255, 0.02), 0 1px 2px rgba(0, 0, 0, 0.07); }
 button.titlebutton, button.sidebar-button, notebook > header > tabs > arrow, notebook > header > tabs > arrow.flat, button.flat { border-color: transparent; background-color: transparent; background-image: none; box-shadow: inset 0 1px rgba(255, 255, 255, 0); text-shadow: none; -gtk-icon-shadow: none; transition: none; }
@@ -410,49 +410,49 @@ int main(int argc, char* argv[]) {
         else if (a.rfind("--icon-size=", 0) == 0) {
             std::string size_str = a.substr(12);
 		    try {
-		        // std::stoi превратит "12pt" в 12, а "1px" в 1
+		        // std::stoi will turn "12pt" into 12 and "1px" into 1
 		        icon_size = std::stoi(size_str);
 		    } catch (...) {
-		        // return 0; // На случай, если строка была пустой или некорректной
+		        // return 0; // In case the string was empty or invalid
 		    }
 			icon_size = std::clamp(icon_size, 16, 128);
         }
         else if (a.rfind("--theme=", 0) == 0) {
             theme = a.substr(8);
-            // … прежний парсинг, теперь с валидацией:
+            // …the previous parsing, now with validation:
             if (theme.length() > 5 && theme.rfind(":dark") == theme.length() - 5) {
                 dark = true; theme.erase(theme.length() - 5);
             }
             if (!gtk_renderer_t::theme_exists(theme)) {
-                std::cerr << "Тема \"" << theme << "\" не найдена (см. --themes)\n";
+                std::cerr << "Theme \"" << theme << "\" not found (see --themes)\n";
                 return 1;
             }
             gtk_renderer_t::set_theme(theme.c_str(), dark);
         } else {
             css_file = a;
             if (!g_file_test(css_file.c_str(), G_FILE_TEST_EXISTS)) {
-    			std::cout << "Файл: '" << css_file << "' недосупен\n";
+    			std::cout << "File: '" << css_file << "' is inaccessible\n";
                 return 1;
             }
         }
     }
-    std::cout << "Тема: " << gtk_renderer_t::current_theme() << "\n";
-    std::cout << "Размер иконок: " << icon_size << ',' << icon_size*2 << "\n";
+    std::cout << "Theme: " << gtk_renderer_t::current_theme() << "\n";
+    std::cout << "Icon size: " << icon_size << ',' << icon_size*2 << "\n";
 
     auto bake_one = [&](const std::string& icon, const std::string& out,
                         GtkStateFlags st, int w, int h, int s) {
         if (use_builtin)       return gtk_renderer_t::bake_builtin(theme, dark, icon, out, st, w, h, s);
         if (!css_file.empty()) return gtk_renderer_t::bake_file(css_file, icon, out, st, w, h, s);
-        return gtk_renderer_t::bake_system(icon, out, st, w, h, s);   // новый дефолт
+        return gtk_renderer_t::bake_system(icon, out, st, w, h, s);   // new default
     };
-    // … циклы по кнопкам/состояниям/масштабам зовут bake_one …
+    // … loops over buttons/states/scales call bake_one …
     std::vector<std::string> buttons = {"close", "minimize", "maximize", "restore"};
 
     const struct { const char* name; GtkStateFlags state; } states[] = {
         {"normal",   GTK_STATE_FLAG_NORMAL},
         {"hover",    GTK_STATE_FLAG_PRELIGHT},
-        // Реальное нажатие в GTK — :hover:active (указатель на кнопке + кнопка зажата),
-        // в CSS есть отдельные правила button:hover:active — печём именно эту комбинацию
+        // A real press in GTK is :hover:active (pointer on the button + button held down),
+        // the CSS has separate button:hover:active rules — bake exactly this combination
         {"active",   GtkStateFlags(GTK_STATE_FLAG_PRELIGHT | GTK_STATE_FLAG_ACTIVE)},
         {"backdrop", GTK_STATE_FLAG_BACKDROP},
     };
@@ -470,7 +470,7 @@ int main(int argc, char* argv[]) {
                 std::cout << (ok ? "OK   " : "FAIL ") << out << "\n";
             }
 	}
-    std::cout << "Все текстуры успешно обновлены под вашу текущую тему!" << std::endl;
+    std::cout << "All textures successfully updated for your current theme!" << std::endl;
 
     return 0;
 }

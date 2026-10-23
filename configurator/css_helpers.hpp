@@ -4,19 +4,19 @@
 
 namespace css {
 
-// Вспомогательная функция для очистки пробелов и переносов строк
+// Helper function for trimming whitespace and line breaks
 std::string trim(const std::string& text);
 
 int parse_numeric(const std::string& value);
 
 #if __cplusplus < 202002L
-    // === ДЛЯ C++17 ===
-    // Обычная Си-функция, которая реализована в вашем .cpp через vsnprintf
+    // === FOR C++17 ===
+    // A regular C function, implemented in your .cpp via vsnprintf
     std::string cxx_format(std::string fmt, ...);
 #else
-    // === ДЛЯ C++20 ===
-    // Просто перенаправляем имя cpp_format на оригинальный std::format.
-    // Без макросов, без шаблонов, чисто силами компилятора!
+    // === FOR C++20 ===
+    // Simply redirect the name cpp_format to the original std::format.
+    // No macros, no templates — just the compiler.
 #define cpp_format  std::format
 #endif
 
