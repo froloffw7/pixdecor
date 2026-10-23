@@ -1,357 +1,215 @@
-#include "deco-theme.hpp"
-#include <wayfire/core.hpp>
-#include <wayfire/opengl.hpp>
 #include <map>
 #include <mutex>
-#include <stdlib.h>
 
-namespace wf
-{
-namespace pixdecor
-{
-wf::option_wrapper_t<int> border_size{"pixdecor/border_size"};
-wf::option_wrapper_t<std::string> titlebar{"pixdecor/titlebar"};
-wf::option_wrapper_t<wf::color_t> fg_color{"pixdecor/fg_color"};
-wf::option_wrapper_t<wf::color_t> bg_color{"pixdecor/bg_color"};
-wf::option_wrapper_t<wf::color_t> fg_text_color{"pixdecor/fg_text_color"};
-wf::option_wrapper_t<wf::color_t> bg_text_color{"pixdecor/bg_text_color"};
-wf::option_wrapper_t<wf::color_t> shadow_color{"pixdecor/shadow_color"};
-wf::option_wrapper_t<wf::color_t> inactive_shadow_color{"pixdecor/inactive_shadow_color"};
-wf::option_wrapper_t<std::string> button_minimize_image{"pixdecor/button_minimize_image"};
-wf::option_wrapper_t<std::string> button_maximize_image{"pixdecor/button_maximize_image"};
-wf::option_wrapper_t<std::string> button_restore_image{"pixdecor/button_restore_image"};
-wf::option_wrapper_t<std::string> button_close_image{"pixdecor/button_close_image"};
-wf::option_wrapper_t<std::string> button_minimize_hover_image{"pixdecor/button_minimize_hover_image"};
-wf::option_wrapper_t<std::string> button_maximize_hover_image{"pixdecor/button_maximize_hover_image"};
-wf::option_wrapper_t<std::string> button_restore_hover_image{"pixdecor/button_restore_hover_image"};
-wf::option_wrapper_t<std::string> button_close_hover_image{"pixdecor/button_close_hover_image"};
-wf::option_wrapper_t<wf::color_t> button_color{"pixdecor/button_color"};
-wf::option_wrapper_t<double> button_line_thickness{"pixdecor/button_line_thickness"};
-/** Create a new theme with the default parameters */
-pixdecor_theme_t::pixdecor_theme_t() : font_description(nullptr, pango_font_description_free)
-{
-    // read initial colours
-    update_colors();
-}
+#include <glib.h> // g_get_user_config_dir()
 
-pixdecor_theme_t::~pixdecor_theme_t()
-{}
+#include "deco-theme.hpp"
 
-void pixdecor_theme_t::update_colors(void)
+// #define __DEBUG_THEME__
+
+namespace wf::pixdecor
 {
-    fg = wf::color_t(fg_color);
-    bg = wf::color_t(bg_color);
-    fg_text = wf::color_t(fg_text_color);
-    bg_text = wf::color_t(bg_text_color);
-}
 
-std::unique_ptr<PangoFontDescription,
-    decltype(& pango_font_description_free)> pixdecor_theme_t::get_font_description()
+pixdecor_theme_t theme;
+
+void pixdecor_theme_t::apply_icon_fallback(icon_t &icon)
 {
-    font_description.reset(pango_font_description_from_string(title_font.value().c_str()));
-    return std::move(font_description);
-}
-
-/** @return The available height for displaying the title */
-int pixdecor_theme_t::get_font_height_px()
-{
-    auto font_desc  = get_font_description();
-    int font_height = pango_font_description_get_size(font_desc.get());
-
-    if (!pango_font_description_get_size_is_absolute(font_desc.get()))
-    {
-        font_height *= 4;
-        font_height /= 3;
+    // Active state fallbacks
+    if (icon.active_hovered.empty()) {
+        icon.active_hovered = icon.active_normal;
     }
-
-    return font_height / PANGO_SCALE;
-}
-
-int pixdecor_theme_t::get_title_height()
-{
-    int height = get_font_height_px();
-    height *= 3;
-    height /= 2;
-    height += 8;
-    if (height < MIN_BAR_HEIGHT)
-    {
-        height = MIN_BAR_HEIGHT;
+    if (icon.active_clicked.empty()) {
+        icon.active_clicked = icon.active_hovered;
     }
-
-    return ((std::string(titlebar) == "always" ||
-        (std::string(titlebar) == "windowed" && !maximized) ||
-        (std::string(titlebar) == "maximized" && maximized)) &&
-        (std::string(titlebar) !=
-            "never")) ? height + ((maximized && !maximized_borders) ? border_size : 0) : 0;
-}
-
-/** @return The available border for resizing */
-int pixdecor_theme_t::get_border_size() const
-{
-    return (!maximized_borders && maximized) ? 0 : border_size;
-}
-
-/** @return The input area for resizing */
-int pixdecor_theme_t::get_input_size() const
-{
-    return std::max(get_border_size(), MIN_RESIZE_HANDLE_SIZE);
-}
-
-wf::color_t pixdecor_theme_t::get_decor_color(bool active) const
-{
-    return active ? fg : bg;
-}
-
-wf::color_t pixdecor_theme_t::get_shadow_color(bool active) const
-{
-    return active ? shadow_color : inactive_shadow_color;
-}
-
-void pixdecor_theme_t::set_maximize(bool state)
-{
-    maximized = state;
-}
-
-/**
- * Fill the given rectangle with the background color(s).
- *
- * @param fb The target framebuffer, must have been bound already
- * @param rectangle The rectangle to redraw.
- * @param scissor The GL scissor rectangle to use.
- * @param active Whether to use active or inactive colors
- */
-void pixdecor_theme_t::render_background(const wf::scene::render_instruction_t& data,
-    wf::geometry_t rectangle, bool active, wf::pointf_t p)
-{
-    if ((std::string(effect_type) == "none") && (std::string(overlay_engine) == "none"))
-    {
-        data.pass->custom_gles_subpass(data.target, [&]
-        {
-            wf::gles::for_each_scissor_rect(data.target, data.damage, [=] ()
-            {
-                OpenGL::render_rectangle(rectangle, get_decor_color(active),
-                    wf::gles::render_target_orthographic_projection(data.target));
-            });
-        });
-    } else
-    {
-        smoke.render_effect(data, rectangle);
+    // Inactive (backdrop) state fallbacks
+    if (icon.inactive_normal.empty()) {
+        icon.inactive_normal = icon.active_normal;
+    }
+    if (icon.inactive_hovered.empty()) {
+        icon.inactive_hovered = icon.active_hovered;
+    }
+    if (icon.inactive_clicked.empty()) {
+        icon.inactive_clicked = icon.active_clicked;
     }
 }
 
-/**
- * Render the given text on a cairo_surface_t with the given size.
- * The caller is responsible for freeing the memory afterwards.
- */
-cairo_surface_t*pixdecor_theme_t::render_text(std::string text,
-    int width, int height, int t_width, int border, int right_buttons_width, int left_buttons_width,
-    bool active)
+void pixdecor_theme_t::update(bool subscribe)
 {
-    const auto format = CAIRO_FORMAT_ARGB32;
-    auto surface = cairo_image_surface_create(format, width, height);
-
-    if (height == 0)
-    {
-        return surface;
-    }
-
-    auto cr = cairo_create(surface);
-
-    PangoLayout *layout;
-    int x, w, h;
-
-    // render text
-    auto font_desc = get_font_description();
-
-    layout = pango_cairo_create_layout(cr);
-    pango_layout_set_font_description(layout, font_desc.get());
-    pango_layout_set_text(layout, text.c_str(), -1);
-    cairo_set_source_rgba(cr, active ? fg_text.r : bg_text.r, active ? fg_text.g : bg_text.g,
-        active ? fg_text.b : bg_text.b, 1);
-    pango_layout_get_pixel_size(layout, &w, &h);
-    int padding = 10;
-    int left    = left_buttons_width + border;
-    int right   = right_buttons_width + border + padding;
-    switch (int(title_text_align))
-    {
-      // left
-      case 0:
-        x = left;
-        break;
-
-      // right
-      case 2:
-        x = std::max(left, t_width - (w + right));
-        break;
-
-      // center
-      case 1:
-      default:
-        x = std::max(left, (t_width - w) / 2);
-        break;
-    }
-
-    auto text_width = std::max(0, t_width - (x + right));
-    pango_layout_set_width(layout, text_width * PANGO_SCALE);
-    pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_END);
-    cairo_translate(cr, x, (height - h) / 2);
-    pango_cairo_show_layout(cr, layout);
-    g_object_unref(layout);
-    cairo_destroy(cr);
-
-    return surface;
-}
-
-static cairo_surface_t *get_cairo_surface(button_type_t button, int w, int h, int border, float alpha)
-{
-    auto surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
-
-    auto cr = cairo_create(surface);
-    cairo_set_antialias(cr, CAIRO_ANTIALIAS_DEFAULT);
-
-    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
-    cairo_set_source_rgba(cr, 0, 0, 0, 0);
-    cairo_rectangle(cr, 0, 0, w, h);
-    cairo_fill(cr);
-
-    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
-
-    /** Draw the button  */
-    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
-    cairo_set_source_rgba(cr,
-        wf::color_t(button_color).r,
-        wf::color_t(button_color).g,
-        wf::color_t(button_color).b,
-        wf::color_t(button_color).a * alpha);
-    double line_width = button_line_thickness;
-    switch (button)
-    {
-      case BUTTON_CLOSE:
-        cairo_set_line_width(cr, line_width * border);
-        cairo_move_to(cr, 1.0 * w / 4.0,
-            1.0 * h / 4.0);
-        cairo_line_to(cr, 3.0 * w / 4.0,
-            3.0 * h / 4.0);
-        cairo_move_to(cr, 3.0 * w / 4.0,
-            1.0 * h / 4.0);
-        cairo_line_to(cr, 1.0 * w / 4.0,
-            3.0 * h / 4.0);
-        cairo_stroke(cr);
-        break;
-
-      case BUTTON_TOGGLE_MAXIMIZE:
-        cairo_set_line_width(cr, line_width * border);
-        cairo_rectangle(cr, w / 4.0, h / 4.0, w / 2.0, h / 2.0);
-        cairo_stroke(cr);
-        break;
-
-      case BUTTON_MINIMIZE:
-        cairo_set_line_width(cr, line_width * border);
-        cairo_move_to(cr, 1.0 * w / 4.0,
-            3.0 * h / 4.0);
-        cairo_line_to(cr, 3.0 * w / 4.0,
-            3.0 * h / 4.0);
-        cairo_stroke(cr);
-        break;
-
-      default:
-        assert(false);
-    }
-
-    cairo_destroy(cr);
-
-    return surface;
-}
-
-static bool create_button_surfaces(std::unique_ptr<button_surfaces_t>& button_surfaces,
-    std::string button_normal_image, std::string button_hover_image)
-{
-    bool normal_same_as_hover = false;
-    if (!button_normal_image.empty())
-    {
-        button_surfaces->normal = cairo_image_surface_create_from_png(button_normal_image.c_str());
-    }
-
-    if (!button_normal_image.empty() && (button_normal_image == button_hover_image) &&
-        button_surfaces->normal && (cairo_surface_status(button_surfaces->normal) == CAIRO_STATUS_SUCCESS))
-    {
-        normal_same_as_hover = true;
-    }
-
-    if (button_hover_image.empty())
-    {
-        normal_same_as_hover = true;
-    } else
-    {
-        button_surfaces->hovered = cairo_image_surface_create_from_png(button_hover_image.c_str());
-    }
-
-    return normal_same_as_hover;
-}
-
-std::unique_ptr<button_surfaces_t> pixdecor_theme_t::get_button_surface(button_type_t button,
-    const button_state_t& state) const
-{
-    std::unique_ptr<button_surfaces_t> button_surfaces = std::make_unique<button_surfaces_t>();
-    bool normal_same_as_hover = false;
-
-    switch (button)
-    {
-      case BUTTON_CLOSE:
-        normal_same_as_hover = create_button_surfaces(button_surfaces, std::string(
-            button_close_image), std::string(button_close_hover_image));
-        break;
-
-      case BUTTON_TOGGLE_MAXIMIZE:
-        if (this->maximized)
-        {
-            normal_same_as_hover = create_button_surfaces(button_surfaces, std::string(
-                button_restore_image), std::string(button_restore_hover_image));
-        } else
-        {
-            normal_same_as_hover = create_button_surfaces(button_surfaces, std::string(
-                button_maximize_image), std::string(button_maximize_hover_image));
+    settings_t new_s;
+    gtk_theme_t new_gtk_theme;
+    //double shadow_size = 0;
+    
+    build_settings_from_options(new_s);
+    if (new_s.overlay_engine == overlay_t::gtk_theme) {
+        std::string theme_name{ new_s.theme_name }; // {"Arc-Dark"};
+        if (theme_name.length() >= 2) {
+            // strip matching quotes at the beginning and end
+            const char q = theme_name.front();
+            if ((q == '"' || q == '\'') && theme_name.back() == q)
+                theme_name = theme_name.substr(1, theme_name.length() - 2);   // one layer, not recursive
         }
-
-        break;
-
-      case BUTTON_MINIMIZE:
-        normal_same_as_hover = create_button_surfaces(button_surfaces, std::string(
-            button_minimize_image), std::string(button_minimize_hover_image));
-        break;
-
-      default:
-        break;
+        const std::string theme_path = std::string(g_get_user_config_dir()) + "/wayfire/assets/" + theme_name;
+#ifdef __DEBUG_THEME__
+        LOGW("GTK Theme path: ", theme_path);
+        // std::string settings_path{ theme_path + "/settings.ini" };
+        const std::string settings_path = std::string("/tmp/wayfire/assets/")  + theme_name + "/settings.ini";
+#else
+        const std::string settings_path = theme_path + "/settings.ini";
+#endif        
+        if (load_gtk_theme(settings_path, new_gtk_theme)) {
+            // TODO Titlebar shadow
+            // new_s.titlebar_height = new_gtk_theme.titlebar.min_height;
+            // font_manager_t::update_font(new_gtk_theme.titlebar);
+        } else {
+            LOGE("GTK Theme incorect. Check path:", theme_path, " Theme name:", theme_name);
+            new_s.overlay_engine = overlay_t::none;
+        }
     }
+    if (new_s.overlay_engine != overlay_t::gtk_theme) {
+        new_gtk_theme.titlebar.height         = new_s.titlebar_height;
+        new_gtk_theme.titlebar.text_align     = new_s.titlebar_text_align;
+        new_gtk_theme.titlebar.button_layout  = new_s.button_layout;
+        new_gtk_theme.titlebar.color          = new_s.text_color;
+        new_gtk_theme.titlebar.color_backdrop = new_s.text_color;
+        new_gtk_theme.titlebar.background.with_gradient = false;
+        new_gtk_theme.titlebar.background.color = new_s.background_text_color;
+        new_gtk_theme.titlebar.background_backdrop.with_gradient = false;
+        new_gtk_theme.titlebar.background_backdrop.color = new_s.background_text_color;
+        // new_gtk_theme.shadow_pt.width        = new_s.border_size;
+        new_gtk_theme.icons.minimize.active_normal  = new_s.button_minimize_image;
+        new_gtk_theme.icons.minimize.active_hovered = new_s.button_minimize_hover_image;
+        new_gtk_theme.icons.maximize.active_normal  = new_s.button_maximize_image;
+        new_gtk_theme.icons.maximize.active_hovered = new_s.button_maximize_hover_image;
+        new_gtk_theme.icons.close.active_normal     = new_s.button_close_image;
+        new_gtk_theme.icons.close.active_hovered    = new_s.button_close_hover_image;
+        new_gtk_theme.icons.restore.active_normal   = new_s.button_restore_image;
+        if (new_gtk_theme.icons.restore.active_normal.empty())
+            new_gtk_theme.icons.restore.active_normal = new_gtk_theme.icons.maximize.active_normal;
+        new_gtk_theme.icons.restore.active_hovered  = new_s.button_restore_hover_image;
+        if (new_gtk_theme.icons.restore.active_hovered.empty())
+            new_gtk_theme.icons.restore.active_hovered = new_gtk_theme.icons.maximize.active_hovered;
 
-    if (button_surfaces->normal && (cairo_surface_status(button_surfaces->normal) == CAIRO_STATUS_SUCCESS) &&
-        button_surfaces->hovered &&
-        (cairo_surface_status(button_surfaces->hovered) == CAIRO_STATUS_SUCCESS) &&
-        !normal_same_as_hover)
-    {
-        return button_surfaces;
+        //shadow_size = new_s.shadow_size;
+        // font_manager_t::update_font(new_s.titlebar_font);
     }
+    /* input area for resizing */
+    // new_s.input_size = std::min(std::max(new_s.input_size, MIN_RESIZE_SIZE), shadow_size);
+    new_s.input_size = std::max(new_s.input_size, MIN_RESIZE_SIZE);
 
-    if (!button_surfaces->normal || (cairo_surface_status(button_surfaces->normal) != CAIRO_STATUS_SUCCESS))
-    {
-        button_surfaces->normal = get_cairo_surface(button, state.width, state.height, state.border, 1.0);
-    }
+    apply_icon_fallback(new_gtk_theme.icons.minimize);
+    apply_icon_fallback(new_gtk_theme.icons.maximize);
+    apply_icon_fallback(new_gtk_theme.icons.restore);
+    apply_icon_fallback(new_gtk_theme.icons.close);
 
-    if (normal_same_as_hover)
-    {
-        button_surfaces->hovered = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, cairo_image_surface_get_width(
-            button_surfaces->normal), cairo_image_surface_get_height(button_surfaces->normal));
-        auto cr = cairo_create(button_surfaces->hovered);
-        cairo_set_source_surface(cr, button_surfaces->normal, 0, 0);
-        cairo_paint_with_alpha(cr, 0.25);
-        cairo_destroy(cr);
-    } else if (!button_surfaces->hovered ||
-               (cairo_surface_status(button_surfaces->hovered) != CAIRO_STATUS_SUCCESS))
-    {
-        button_surfaces->hovered = get_cairo_surface(button, state.width, state.height, state.border, 0.25);
-    }
-
-    return button_surfaces;
+    update(new_s, new_gtk_theme);
+    
+#ifdef __DEBUG_THEME__
+    print_settings(settings);
+    
+    if (settings.overlay_engine == overlay_t::gtk_theme)
+        print_gtk_theme(gtk_theme);
+        
+    LOGW("GTK Theme: ", is_gtk_overlay() ? new_s.theme_name : "NO");
+#endif    
+    if (subscribe) init_updates();
+    
+    emit_updated(resync_t::invalidate);
 }
+
+bool pixdecor_theme_t::is_titlebar_visible(bool is_maximized)
+{
+    if (overlay_engine == overlay_t::gtk_theme)
+        return true;
+    
+    if (titlebar_opts == titlebar_opts_t::never)
+        return false;
+
+    if (titlebar_opts == titlebar_opts_t::always)
+        return true;
+
+    if (is_maximized) {
+        if (titlebar_opts == titlebar_opts_t::windowed)
+            return false;
+    } else {
+        if (titlebar_opts == titlebar_opts_t::maximized)
+            return false;
+    }
+    return true;
 }
+
+double pixdecor_theme_t::get_titlebar_height(bool is_maximized)
+{
+    if (overlay_engine == overlay_t::gtk_theme) {
+        return titlebar.height;
+    }
+
+    if ( (titlebar_opts == titlebar_opts_t::never) ||
+        ((titlebar_opts == titlebar_opts_t::windowed) && is_maximized) ||
+        ((titlebar_opts == titlebar_opts_t::maximized && !is_maximized)))
+        return 0;
+
+    // TODO titlebar.border.radius?
+    return std::round(settings.titlebar_height);
+}
+
+/** @return The available border for resizing
+ *  not used while overlay_t::gtk_theme 
+ **/
+double pixdecor_theme_t::get_border_size(bool is_maximized)
+{
+    if (is_maximized && !settings.maximized_borders)
+        return 0;
+    
+    return settings.border_size;
+}
+
+double pixdecor_theme_t::get_shadow_size(bool is_maximized)
+{
+    if (settings.overlay_engine != overlay_t::gtk_theme) {
+        return is_maximized
+            ? (settings.maximized_shadows ? settings.shadow_size : 0)
+            : settings.shadow_size;
+    }
+    return 0;
+}
+
+wf::decoration_margins_t pixdecor_theme_t::get_margins(bool is_maximized)
+{
+    wf::decoration_margins_t margins{0, 0, 0, 0};
+    double border_size = get_border_size(is_maximized);
+
+    if (overlay_engine == overlay_t::gtk_theme) {
+        if (!is_maximized) {
+            const auto& m{ gtk_theme.margins };
+            margins = wf::decoration_margins_t {
+                .left   = m.left,
+                .right  = m.right,
+                .bottom = m.bottom,
+                .top    = m.top };
+        }
+    } else if (overlay_engine != overlay_t::none) {
+        double shadow_size = get_shadow_size(is_maximized);
+        margins = wf::decoration_margins_t {
+            .left   = shadow_size + border_size,
+            .right  = shadow_size + border_size,
+            .bottom = shadow_size + border_size,
+            .top    = shadow_size + border_size };
+    } else {
+        margins = wf::decoration_margins_t {
+            .left   = border_size,
+            .right  = border_size,
+            .bottom = border_size,
+            .top    = border_size };
+    }
+    // LOGW(fmt_margins(margins, "Theme margins"));
+    return margins;
+}
+
+
+wf::color_t pixdecor_theme_t::decoration_color(bool active)
+{
+    return active ? settings.color : settings.background_color;
+}
+
+
 }

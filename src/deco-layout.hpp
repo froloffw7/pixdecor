@@ -2,92 +2,146 @@
 
 #include <vector>
 #include <wayfire/util.hpp>
-#include "deco-button.hpp"
 
-#include <linux/input-event-codes.h>
+#include "deco-cairo.hpp"
 
-namespace wf
+namespace wf::pixdecor
 {
-namespace pixdecor
-{
-static constexpr uint32_t DECORATION_AREA_RENDERABLE_BIT = (1 << 16);
-static constexpr uint32_t DECORATION_AREA_RESIZE_BIT     = (1 << 17);
-static constexpr uint32_t DECORATION_AREA_MOVE_BIT   = (1 << 18);
-static constexpr uint32_t DECORATION_AREA_SHADOW_BIT = (1 << 19);
 
-
-/** Different types of areas around the decoration */
-enum decoration_area_type_t
+extern const std::string edges_as_string(uint32_t edges);
+/**
+ * Action which needs to be taken in response to an input event
+ */
+enum class layout_action_t
 {
-    DECORATION_AREA_MOVE          = DECORATION_AREA_MOVE_BIT,
-    DECORATION_AREA_TITLE         =
-        DECORATION_AREA_MOVE_BIT | DECORATION_AREA_RENDERABLE_BIT,
-    DECORATION_AREA_BUTTON        = DECORATION_AREA_RENDERABLE_BIT,
-    DECORATION_AREA_SHADOW        = DECORATION_AREA_SHADOW_BIT,
-    DECORATION_AREA_RESIZE_LEFT   = WLR_EDGE_LEFT | DECORATION_AREA_RESIZE_BIT,
-    DECORATION_AREA_RESIZE_RIGHT  = WLR_EDGE_RIGHT | DECORATION_AREA_RESIZE_BIT,
-    DECORATION_AREA_RESIZE_TOP    = WLR_EDGE_TOP | DECORATION_AREA_RESIZE_BIT,
-    DECORATION_AREA_RESIZE_BOTTOM = WLR_EDGE_BOTTOM | DECORATION_AREA_RESIZE_BIT,
+    none            = 0,
+    /* Drag actions */
+    move            = 1,
+    resize          = 2,
+    /* Button actions */
+    close           = 3,
+    toggle_maximize = 4,
+    minimize        = 5,
+    /* Axis actions */
+    shade           = 6,
+    unshade         = 7,
 };
 
 /**
- * Represents an area of the decoration which reacts to input events.
+ * Represents an area of the window parts which reacts to input events.
  */
-struct decoration_area_t
+struct area_t
 {
   public:
     /**
      * Initialize a new decoration area with the given type and geometry
      */
-    decoration_area_t(decoration_area_type_t type, wf::geometry_t g);
+    area_t(const wf::geometry_t& g) : geometry{ g } {}
+    virtual ~area_t() = default;
 
-    /**
-     * Initialize a new decoration area holding a button.
-     *
-     * @param g The geometry of the button.
-     * @param damage_callback Callback to execute when button needs repaint.
-     * @param theme The theme to use for the button.
-     */
-    decoration_area_t(wf::geometry_t g,
-        std::function<void(wf::geometry_t)> damage_callback,
-        pixdecor_theme_t& theme);
+    wf::geometry_t   get_geometry() const { return geometry; }
+    virtual void     set_geometry(const wf::geometry_t& g) { geometry = g; }
 
-    /** @return The geometry of the decoration area, relative to the layout */
-    wf::geometry_t get_geometry() const;
-    void set_geometry(wf::geometry_t g);
+    //virtual void   set_activited(bool active) { activated = active; }
 
-    /** @return The area's button, if the area is a button. Otherwise UB */
-    button_t& as_button();
+    virtual const char*
+                     get_cursor_name() const { return "default"; }
+    // or comparison with AREA_MOVE
+    virtual bool     can_move() const { return false; }
+    // By default the area does NOT participate in resizing (returns empty geometry)
+    virtual bool     can_resize() const { return false; }
+    virtual uint32_t get_edges() const { return WLR_EDGE_NONE; }
 
-    /** @return The type of the decoration area */
-    decoration_area_type_t get_type() const;
+    virtual bool     is_interactive() const { return false; }
+    virtual void     set_hovered(bool hover) {}
+    virtual void     set_clicked(bool click) {}
 
-  private:
-    std::function<void(wf::geometry_t)> damage_callback;
-    decoration_area_type_t type;
-    wf::geometry_t geometry;
+    virtual layout_action_t
+                     get_click_action() { return layout_action_t::none; }
 
-    /* For buttons only */
-    std::unique_ptr<button_t> button;
+    virtual bool     is_renderable() const { return false; }
+    virtual void     render(const wf::scene::render_instruction_t& data, bool win_active) {}
+
+    virtual const char*
+                     area_type() const { return "Base area"; }
+
+  protected:
+    wf::geometry_t  geometry;
+    // updated in resize()
+    wf::regionf_t   cached_region;
 };
 
-
-/**
- * Action which needs to be taken in response to an input event
- */
-enum decoration_layout_action_t
+struct title_area_t : public area_t
 {
-    DECORATION_ACTION_NONE            = 0,
-    /* Drag actions */
-    DECORATION_ACTION_MOVE            = 1,
-    DECORATION_ACTION_RESIZE          = 2,
-    /* Button actions */
-    DECORATION_ACTION_CLOSE           = 3,
-    DECORATION_ACTION_TOGGLE_MAXIMIZE = 4,
-    DECORATION_ACTION_MINIMIZE        = 5,
-    /* Axis actions */
-    DECORATION_ACTION_SHADE           = 6,
-    DECORATION_ACTION_UNSHADE         = 7,
+  public:
+    explicit    title_area_t(const wf::geometry_t& g, std::function<void(const wf::geometry_t&)> damage_cb);
+    void        set_title_text(const std::string& title_text);
+    void        set_titlebar_width(double width);
+    bool        is_renderable() const { return true; }
+    void        render(const wf::scene::render_instruction_t& data, bool win_active) override;
+
+    const char* area_type() const { return "Title area"; }
+
+  private:
+    std::unique_ptr<title_t> title;
+};
+
+struct button_area_t : public area_t
+{
+  public:
+    button_area_t(button_type_t btn_type, const wf::geometry_t& g, std::function<void(const wf::geometry_t&)> damage_cb);
+
+    void        set_geometry(const wf::geometry_t& g) override;
+    button_t&   get_button();
+
+    bool        is_interactive() const { return true; }
+    void        set_hovered(bool hover) override;
+    void        set_clicked(bool click) override;
+    virtual layout_action_t
+                get_click_action();
+    bool        is_renderable() const { return true; }
+    // Here the method must be declared so it matches the implementation!
+    void        render(const wf::scene::render_instruction_t& data, bool win_active) override;
+
+    const char* area_type() const { return "Button area"; }
+
+  private:
+    std::unique_ptr<button_t> button;
+};
+// Support for padding around buttons (move_area_t / padding_area_t)
+struct move_area_t : public area_t
+{
+  public:
+    explicit move_area_t( const wf::geometry_t& g)
+                        : area_t(g) {}
+
+    bool         can_move() const override { return true; }
+
+    const char*  area_type() const { return "Move area"; }
+};
+
+struct resize_area_t : public area_t
+{
+  public:
+    resize_area_t( uint32_t _edges, const wf::geometry_t& g)
+                 : area_t(g)
+                 , edges(_edges) {}
+
+    const char*  get_cursor_name() const override;
+
+    bool         can_move() const override { return false; }
+    bool         can_resize() const override { return true; }
+    uint32_t     get_edges() const override { return edges; }
+
+    const char*  area_type() const { return "Resize area"; }
+
+  private:
+    uint32_t edges;
+};
+
+// TODO
+struct shadow_area_t : public area_t
+{
 };
 
 class pixdecor_theme_t;
@@ -107,18 +161,17 @@ class pixdecor_layout_t
      * @param damage_callback The function to be called when a part of the
      * layout needs a repaint.
      */
-    pixdecor_layout_t(pixdecor_theme_t& theme,
-        std::function<void(wf::geometry_t)> damage_callback);
+    pixdecor_layout_t(std::function<void(wf::geometry_t)> damage_callback);
     ~pixdecor_layout_t();
 
+    void clear();
     /** Regenerate layout using the new size */
-    void resize(int width, int height);
-
+    void resize(const dimensionsf_t& dims, double tilebar_height);
     /**
      * @return The decoration areas which need to be rendered, in top to bottom
      *  order.
      */
-    std::vector<nonstd::observer_ptr<decoration_area_t>> get_renderable_areas();
+    std::vector<nonstd::observer_ptr<area_t>> get_renderable_areas();
 
     /** @return The combined region of all layout areas */
     wf::regionf_t calculate_region() const;
@@ -130,7 +183,7 @@ class pixdecor_layout_t
 
     struct action_response_t
     {
-        decoration_layout_action_t action;
+        layout_action_t action;
         /* For resizing action, determine the edges for resize request */
         uint32_t edges;
     };
@@ -145,7 +198,7 @@ class pixdecor_layout_t
      * @return The action which needs to be carried out in response to this
      *  event.
      */
-    action_response_t handle_press_event(uint32_t button, bool pressed = true);
+    action_response_t handle_click_event(bool pressed = true);
 
     /**
      * Handle axis event.
@@ -160,45 +213,58 @@ class pixdecor_layout_t
      */
     void handle_focus_lost();
 
-    void set_maximize(bool state);
+    void set_tiled_edges(uint32_t edges) { cached_tiled_edges = edges; }
+
+    void set_fullscreen(uint32_t edges) { cached_tiled_edges = edges; }
+
+    // even simpler: contains without region allocations:
+    bool contains(const wf::pointf_t& at) const;
+
+    // 1. Store the text. If the area already exists — update it
+    void set_title(const std::string& title_text)
+    {
+        // LOGW("New title text: ", title_text, " old: ", cached_text);
+        cached_text = title_text;
+        if (title_area) title_area->set_title_text(title_text);
+    }
 
   private:
-    const int titlebar_size;
-    const int border_size;
-    pixdecor_theme_t& theme;
-    bool maximized;
-
     std::function<void(wf::geometry_t)> damage_callback;
 
-    std::vector<std::unique_ptr<decoration_area_t>> layout_areas;
-    wf::geometry_t cached_titlebar;
+    std::vector<std::unique_ptr<area_t>> layout_areas;
+    // Non-owning pointer (raw pointer) for fast access without searching the vector
+    title_area_t* title_area = nullptr;
 
-    bool is_grabbed = false;
+    uint32_t      cached_tiled_edges;
+    std::string   cached_text;
+    double        cached_titlebar_height;
+    int           cached_input_size;
+
+    bool          is_grabbed = false;
     /* Position where the grab has started */
-    wf::point_t grab_origin;
+    wf::point_t   grab_origin;
     /* Last position of the input */
-    wf::point_t current_input;
+    wf::point_t   current_input;
     /* double-click timer */
     wf::wl_timer<false> timer;
     bool double_click_at_release = false;
 
     /** Create buttons in the layout, and return their total geometry */
-    wf::geometry_t create_left_buttons(int width, int height);
-    wf::geometry_t create_right_buttons(int width, int height);
+    const wf::geometry_t create_left_buttons(const std::vector<button_type_t>& buttons,
+    	const dimensionsf_t& dims, const css::sides_t& padding, double spacing,
+        const dimensionsf_t& btn_dims);
+    const wf::geometry_t create_right_buttons(const std::vector<button_type_t>& buttons,
+	    const dimensionsf_t& dims, const css::sides_t& padding, double spacing,
+        const dimensionsf_t& btn_dims);
 
-    /** Calculate resize edges based on @current_input */
-    uint32_t calculate_resize_edges() const;
     /** Update the cursor based on @current_input */
     void update_cursor();
-
     /**
      * Find the layout area at the given coordinates, if any
      * @return The layout area or null on failure
      */
-    nonstd::observer_ptr<decoration_area_t> find_area_at(wf::point_t point);
-
-    /** Unset hover state of hovered button at @position, if any */
-    void unset_hover(wf::point_t position);
+    nonstd::observer_ptr<area_t> find_area_at(wf::point_t point);
 };
+
 }
-}
+

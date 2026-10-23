@@ -6,11 +6,15 @@
 		<category>Effects</category>
 		<group>
 			<_short>General</_short>
-			<option name="border_size" type="int">
-				<_short>Border size</_short>
-				<_long>Sets the border size in pixels.</_long>
-				<default>5</default>
-				<min>0</min>
+			<option name="ignore_views" type="string">
+				<_short>Decoration disabled for specified window types</_short>
+				<_long>Disables window decoration for windows matching the specified criteria.</_long>
+				<default>none</default>
+			</option>
+			<option name="always_decorate" type="string">
+				<_short>Decoration applied for specified window types</_short>
+				<_long>Forces window decoration for windows matching the specified criteria.</_long>
+				<default>none</default>
 			</option>
 			<option name="titlebar" type="string">
 				<_short>When to render the titlebar</_short>
@@ -33,6 +37,29 @@
 					<_name>Never</_name>
 				</desc>
 			</option>
+			<option name="title_font" type="string">
+				<_short>Title Font</_short>
+				<_long>Font to use for the titlebar. The font size determines the titlebar height.</_long>
+				<default>sans 12</default>
+			</option>
+			<option name="titlebar_height" type="int">
+				<_short>Titlebar height</_short>
+				<_long>Sets the titlebar height in pixels. If set to 0, to be determined from font size</_long>
+				<default>0</default>
+				<min>0</min>
+			</option>
+			<option name="border_size" type="int">
+				<_short>Border size</_short>
+				<_long>Sets the border size in pixels.</_long>
+				<default>0</default>
+				<min>0</min>
+			</option>
+			<option name="input_size" type="int">
+				<_short>Border size</_short>
+				<_long>Sets the border size in pixels.</_long>
+				<default>5</default>
+				<min>0</min>
+			</option>
 			<option name="maximized_borders" type="bool">
 				<_short>Draw borders on maximized windows</_short>
 				<_long>Whether or not to render side and bottom decorations on maximized windows.</_long>
@@ -42,21 +69,6 @@
 				<_short>Draw shadows on maximized windows</_short>
 				<_long>Whether or not to allocate space for shadows on maximized windows.</_long>
 				<default>false</default>
-			</option>
-			<option name="ignore_views" type="string">
-				<_short>Decoration disabled for specified window types</_short>
-				<_long>Disables window decoration for windows matching the specified criteria.</_long>
-				<default>none</default>
-			</option>
-			<option name="always_decorate" type="string">
-				<_short>Decoration applied for specified window types</_short>
-				<_long>Forces window decoration for windows matching the specified criteria.</_long>
-				<default>none</default>
-			</option>
-			<option name="title_font" type="string">
-				<_short>Title Font</_short>
-				<_long>Font to use for the titlebar. The font size determines the titlebar height.</_long>
-				<default>sans 12</default>
 			</option>
 			<option name="fg_color" type="color">
 				<_short>Color when focused</_short>
@@ -78,22 +90,16 @@
 				<_long>Color of the window titlebar text when it does not have focus.</_long>
 				<default>0.7 0.7 0.7 1.0</default>
 			</option>
-			<option name="title_text_align" type="int">
+			<option name="title_text_align" type="string">
 				<_short>Titlebar Text Alignment</_short>
 				<_long>Sets the alignment of the titlebar text.</_long>
-				<default>1</default>
-				<desc>
-					<value>0</value>
-					<_name>Left</_name>
-				</desc>
-				<desc>
-					<value>1</value>
-					<_name>Center</_name>
-				</desc>
-				<desc>
-					<value>2</value>
-					<_name>Right</_name>
-				</desc>
+				<default>center</default>
+				<desc><value>0</value><_name>Left</_name></desc>
+				<desc><value>1</value><_name>Center</_name></desc>
+				<desc><value>2</value><_name>Right</_name></desc>
+				<desc><value>left</value><_name>Left</_name></desc>
+				<desc><value>center</value><_name>Center</_name></desc>
+				<desc><value>right</value><_name>Right</_name></desc>
 			</option>
 			<option name="overlay_engine" type="string">
 				<_short>Overlay Engine</_short>
@@ -111,6 +117,15 @@
 					<value>beveled_glass</value>
 					<_name>Beveled Glass</_name>
 				</desc>
+				<desc>
+					<value>gtk_theme</value>
+					<_name>GTK Theme with titlebar and decorations styles</_name>
+				</desc>
+			</option>
+            <option name="theme_name" type="string">
+				<_short>GTK3 theme</_short>
+				<_long>GTK3 theme name when gtk_theme selected as overlay_engine</_long>
+				<default></default>
 			</option>
 			<option name="effect_type" type="string">
 				<_short>Effect Type</_short>
@@ -187,6 +202,11 @@
 				<_long>WARNING: Enabling this option can use lots of system resources. Enables animating and constant repainting of window decorations.</_long>
 				<default>false</default>
 			</option>
+			<option name="animate_focused_only" type="bool">
+				<_short>Animate Effects only on active window</_short>
+				<_long>WARNING: This option help reduce system resources usage. Animating and constant repainting decorations limited to the active window.</_long>
+				<default>false</default>
+			</option>
 			<option name="rounded_corner_radius" type="int">
 				<_short>Rounded Corner Radius</_short>
 				<_long>The radius for corners.</_long>
@@ -202,11 +222,6 @@
 			<option name="shadow_color" type="color">
 				<_short>Shadow Color</_short>
 				<_long>Color of the drop shadows.</_long>
-				<default>0.0 0.0 0.0 0.25</default>
-			</option>
-			<option name="inactive_shadow_color" type="color">
-				<_short>Inactive Shadow Color</_short>
-				<_long>Color of the drop shadows for unfocused windows.</_long>
 				<default>0.0 0.0 0.0 0.25</default>
 			</option>
 		</group>
@@ -315,7 +330,7 @@
 			<option name="enable_shade" type="bool">
 				<_short>Enable Shade Effect</_short>
 				<_long>Use the axis binding or scroll on the titlebar of pixdecor windows to shade windows into their respective titlebars.</_long>
-				<default>false</default>
+				<default>true</default>
 			</option>
 			<option name="shade_duration" type="animation">
 				<_short>Shade Duration</_short>
