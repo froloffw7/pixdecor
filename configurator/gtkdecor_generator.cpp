@@ -587,30 +587,50 @@ bool get_property(css::data_t& css_data, const std::string& selector, const std:
 
 #endif
 
-int main() {
-	std::cout << "=== Starting the settings.ini generator ===" << std::endl;
+int main(int argc, char* argv[]) {
+	std::string gtk_theme;
+	bool dark = false;
 
-	std::string gtk_theme    = get_gsettings_value("org.gnome.desktop.interface", "gtk-theme");
-	if (gtk_theme.empty()) gtk_theme = "Adwaita";
+    for (int i = 1; i < argc; ++i) {
+        std::string a = argv[i];
+	    if (a == "--dark") { dark = true; }
+        else if (a.rfind("--theme=", 0) == 0) {
+            gtk_theme = a.substr(8);
+            // … прежний парсинг, теперь с валидацией:
+            if (gtk_theme.length() > 5 && gtk_theme.rfind(":dark") == gtk_theme.length() - 5) {
+                dark = true; gtk_theme.erase(gtk_theme.length() - 5);
+            }
+		}
+	}
+	if (gtk_theme.empty()) {
+		gtk_theme    = get_gsettings_value("org.gnome.desktop.interface", "gtk-theme");
+		if (gtk_theme.empty()) gtk_theme = "Adwaita";
+	}
 
 	std::string font_name    = get_gsettings_value("org.gnome.desktop.interface", "font-name");
 	std::string layout       = get_gsettings_value("org.gnome.desktop.wm.preferences", "button-layout");
 	std::string icon_theme   = get_gsettings_value("org.gnome.desktop.interface", "icon-theme");
-	std::cout << "Icon theme:\t" << icon_theme << std::endl; 
 
-	color_scheme = get_gsettings_value("org.gnome.desktop.interface", "color-scheme");
-
-	gtk_theme = "Adwaita";
-	color_scheme = "prefer-dark";
-	
 	// Possible values of the "color-scheme" key:
 	// - 'prefer-dark'  -> The user prefers a dark theme
 	// - 'prefer-light' -> The user prefers a light theme
 	// - 'default'      -> The standard theme (usually light)
+	if (dark) {
+		color_scheme = "prefer-dark";
+	} else {
+		color_scheme = get_gsettings_value("org.gnome.desktop.interface", "color-scheme");
+	}
+
+	std::cout << "=== Starting the settings.ini generator ===" << std::endl;
+	std::cout << "GTK theme:\t"    << gtk_theme    << std::endl; 
 	std::cout << "Color scheme:\t" << color_scheme << std::endl; 
+	std::cout << "Icon theme:\t"   << icon_theme   << std::endl; 
 	
-	//std::string plugin_theme_path = std::string(g_get_user_config_dir()) + "/wayfire/assets/" + gtk_theme;
+#ifdef _DEBUG_THEME_	
 	std::string plugin_theme_path = std::string("/tmp/wayfire/assets/")  + gtk_theme;
+#else
+	std::string plugin_theme_path = std::string(g_get_user_config_dir()) + "/wayfire/assets/" + gtk_theme;
+#endif
     fs::ensure_directory_exists(plugin_theme_path);
 	
 	std::string output_path = plugin_theme_path + "/settings.ini";
